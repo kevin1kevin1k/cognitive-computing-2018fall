@@ -1,0 +1,71 @@
+<html>
+  <head>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@0.13.3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/posenet@0.2.3"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+  </head>
+
+  <body>
+    <style>
+      #video { transform: rotateY(180deg); }
+    </style>
+
+    <video id="video" width="640" height="480" autoplay></video>
+    <button id="snap">Run!</button>
+    <canvas id="canvas" width="640" height="480"></canvas>
+  </body>
+
+  <!-- Place your code in the script tag below. You can also use an external .js file -->
+  <script>
+    var video = document.getElementById('video');
+    var canvas = document.getElementById('canvas');
+    var context = canvas.getContext('2d');
+    var snap = document.getElementById('snap');
+
+    // Get access to the camera!
+    if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      // Not adding `{ audio: true }` since we only want video now
+      navigator.mediaDevices.getUserMedia({ video: true }).then(function(stream) {
+        video.srcObject = stream;
+        video.play();
+      });
+    }
+
+    snap.addEventListener("click", function() {
+      snap.disabled = true;
+      context.setTransform(-1,0,0,1,canvas.width,0);
+      context.drawImage(video, 0, 0, 640, 480);
+      var imageData = context.getImageData(0, 0, 640, 480);
+
+      var imageScaleFactor = 0.5;
+      var outputStride = 16;
+      var flipHorizontal = false;
+
+      posenet.load()
+      .then(net => net.estimateSinglePose(imageData, imageScaleFactor, flipHorizontal, outputStride))
+      .then(pose => {
+        console.log(pose);
+        var positions = [];
+        var parts = ["leftWrist", "rightWrist", "leftKnee", "rightKnee", "leftAnkle", "rightAnkle"];
+        parts.forEach(part => {
+          var pos = pose.keypoints.filter(kp => kp.part === part)[0].position;
+          positions.push([Math.round(pos.x), Math.round(pos.y)]);
+        });
+        var positions_shoulders = [];
+        var shoulders = ["rightShoulder", "leftShoulder"];
+        shoulders.forEach(part => {
+          var pos = pose.keypoints.filter(kp => kp.part === part)[0].position;
+          positions_shoulders.push([pos.x, pos.y]);
+        });
+        var x = (positions_shoulders[0][0] + positions_shoulders[1][0]) / 2;
+        var y = (positions_shoulders[0][1] + positions_shoulders[1][1]) / 2;
+        positions.push([Math.round(x), Math.round(y)]);
+        console.log(positions);
+        $.post("show", JSON.stringify(positions), function(res){
+          console.log(res);
+          snap.disabled = false;
+      	});
+      })
+    });
+  </script>
+</html>
